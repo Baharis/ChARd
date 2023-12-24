@@ -1,32 +1,24 @@
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, RegularPolygon
-from matplotlib.path import Path
+from matplotlib.patches import Circle
 from matplotlib.projections import register_projection
 from matplotlib.projections.polar import PolarAxes
-from matplotlib.spines import Spine
-from matplotlib.transforms import Affine2D
 import numpy as np
 
 
-class RadarAxes(PolarAxes):
-    name = 'radar'
+class ChardAxes(PolarAxes):
+    name = 'chard'
     THETA = np.linspace(0, 2 * np.pi, 3, endpoint=False)
 
     def __init__(self, *args, **kwargs):
+        """Override starting location to be on the right"""
         super().__init__(*args, **kwargs)
-        # rotate plot such that the first axis is at the top
         self.set_theta_zero_location('E')
 
     def plot(self, *args, **kwargs):
         """Override plot so that line is closed by default"""
         lines = super().plot(self.THETA, *args, **kwargs)
         for line in lines:
-            self._close_line(line)
-
-    def _close_line(self, line):
-        x, y = line.get_data()
-        # FIXME: markers at x[0], y[0] get doubled-up
-        if x[0] != x[-1]:
+            x, y = line.get_data()
             x = np.append(x, x[0])
             y = np.append(y, y[0])
             line.set_data(x, y)
@@ -38,16 +30,12 @@ class RadarAxes(PolarAxes):
         # Axes patch centered at (0.5, 0.5), radius 0.5 in axes coordinates
         return Circle((0.5, 0.5), 0.5)
 
-    def _gen_axes_spines(self):
-        return super()._gen_axes_spines()
 
-
-register_projection(RadarAxes)
+register_projection(ChardAxes)
 
 
 def example_data():
     data = [
-        ['Sulfate', 'Nitrate', 'EC'],
         ('Basecase', [
             [0.08, 0.01, 0.03],
             [0.07, 0.05, 0.04],
@@ -62,16 +50,14 @@ if __name__ == '__main__':
     data = example_data()
     spoke_labels = data.pop(0)
 
-    fig, ax = plt.subplots(figsize=(9, 9), subplot_kw=dict(projection='radar'))
+    fig, ax = plt.subplots(figsize=(9, 9), subplot_kw=dict(projection='chard'))
     fig.subplots_adjust(wspace=0.25, hspace=0.20, top=0.85, bottom=0.05)
 
     colors = ['b', 'r', 'g', 'm', 'y']
     data = data[0]
-    title = data[0]
     case_data = data[1]
-    ax.set_rgrids([0.2, 0.4, 0.6, 0.8])
-    ax.set_title(title, weight='bold', size='medium', position=(0.5, 1.1),
-                 horizontalalignment='center', verticalalignment='center')
+    # ax.set_rgrids([0.2, 0.4, 0.6, 0.8])
+
     for d, color in zip(case_data, colors):
         ax.plot(d, color=color)
     ax.set_varlabels(spoke_labels)
