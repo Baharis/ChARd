@@ -2,9 +2,8 @@ from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 from itertools import cycle
 from pathlib import Path
-from typing import List, Union
+from typing import Union
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.colors import Colormap, LinearSegmentedColormap, to_rgb,\
     hsv_to_rgb, rgb_to_hsv
@@ -18,7 +17,7 @@ import pandas as pd
 def safe_normalize(array: np.ndarray) -> np.ndarray:
     """Normalize data to 0-1 range, return 0.5s if all data is equal"""
     mn, mx = np.min(array), np.max(array)
-    return (array - mn) / (mx - mx) if mn < mx else np.full_like(array, 0.5)
+    return (array - mn) / (mx - mn) if mn < mx else np.full_like(array, 0.5)
 
 
 @dataclass
@@ -26,26 +25,25 @@ class ChardSeries:
     a: np.ndarray
     b: np.ndarray
     c: np.ndarray
-    p: np.ndarray = None
-    t: np.ndarray = None
+    e: np.ndarray = None
 
     @classmethod
     def from_raw(cls, csv_path: str) -> 'ChardSeries':
         with open(csv_path, 'r') as csv_file:
             df = pd.read_csv(csv_file, header=None)
-        return cls(df[0], df[1], df[2])
+        return cls(df[0].array, df[1].array, df[2].array)
 
     @classmethod
-    def from_named(cls, csv_path: str) -> 'ChardSeries':
+    def from_named(cls, csv_path: str, emphasis: str = None) -> 'ChardSeries':
         with open(csv_path, 'r') as csv_file:
             df = pd.read_csv(csv_file)
-        return cls(df['a'], df['b'], df['c'],
-                   p=df.get('p', None), t=df.get('t', None))
+        e = e.array if (e := df.get(emphasis, None)) is not None else None
+        return cls(df['a'].array, df['b'].array, df['c'].array, e=e)
 
     @classmethod
-    def from_any(cls, csv_path: str) -> 'ChardSeries':
+    def from_any(cls, csv_path: str, emphasis: str = None) -> 'ChardSeries':
         try:
-            return cls.from_named(csv_path)
+            return cls.from_named(csv_path, emphasis=emphasis)
         except KeyError:
             return cls.from_raw(csv_path)
 
@@ -53,13 +51,20 @@ class ChardSeries:
     def abc(self):
         return np.vstack([self.a, self.b, self.c]).T
 
-    @property
-    def e(self):
-        return self.p if self.p is not None else self.t
+    def normalized(self, to: Union[int, tuple] = None) -> 'ChardSeries':
+        abc = self.a, self.b, self.c
+        print(self.a)
+        print(self.a[-1])
+        if isinstance(to, int):
+            return ChardSeries(*[x / x[to] for x in abc], self.e)
+        elif isinstance(to, list):
+            return ChardSeries(*[x / y for x, y in zip(abc, to)], self.e)
+        else:
+            return self
 
-    def colors(self, cm: Colormap = mpl.colormaps['binary']) -> List[str]:
-        cm = mpl.colormaps['binary'] if cm is None else cm
-        e = safe_normalize(self.e) if self.e else [0.5, ] * len(self.a)
+    def colors(self, cm: Colormap) -> np.ndarray:
+        e = safe_normalize(self.e) if self.e is not None \
+            else np.full_like(self.a, 0.5)
         return cm(e)
 
 
@@ -134,6 +139,10 @@ def parse_args() -> Namespace:
                     help='Path to input file with a single series to plot')
     ap.add_argument('-c', '--color', action='append', default=[],
                     help='Color or colormap to be used for plotting series')
+    ap.add_argument('-n', '--normalizer', action='append', default=[],
+                    help='Index or values to normalize abc to, if needed; '
+                         '"0" will normalize to 1st entry, '
+                         '"12.4,6.5,30.4" will normalize to these values.')
     ap.add_argument('-e', '--emphasis', action='append', default=[],
                     help='Name of the column with information about emphasis; '
                          'Prefix the name with "!" to reverse the order')
@@ -145,9 +154,18 @@ def main() -> None:
     input_paths = [Path(i) for i in args.input]
     colors = cycle(ac if (ac := args.color) else [None])
     emphases = args.emphasis + [''] * len(input_paths)
+    normalizers = []
+    for an in args.normalizer:
+        try:
+            normalizers.append(int(an))
+        except ValueError:
+            normalizers.append([float(a.strip()) for a in an.split(',')])
+    normalizers += [None] * len(input_paths)
     fig, ax = plt.subplots(subplot_kw=dict(projection='chard'))
-    for input_path, color, emphasis in zip(input_paths, colors, emphases):
-        cs = ChardSeries.from_any(input_path)
+    for input_path, color, emphasis, normalizer in \
+            zip(input_paths, colors, emphases, normalizers):
+        cs = ChardSeries.from_any(input_path, emphasis=emphasis)
+        cs = cs.normalized(to=normalizer)
         ax.plot_series(cs, color=color)
     plt.show()
 
