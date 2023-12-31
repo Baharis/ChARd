@@ -2,11 +2,12 @@ from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 from itertools import cycle
 from pathlib import Path
-from typing import List
+from typing import List, Union
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.colors import Colormap
+from matplotlib.colors import Colormap, LinearSegmentedColormap, to_rgb,\
+    hsv_to_rgb, rgb_to_hsv
 from matplotlib.patches import Circle
 from matplotlib.projections import register_projection
 from matplotlib.projections.polar import PolarAxes
@@ -65,6 +66,7 @@ class ChardSeries:
 class ChardAxes(PolarAxes):
     """A mix between Polar/Radial axes, with fixed 3 variables to plot"""
     name = 'chard'
+    DEFAULT_COLORS = cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
     THETA = np.linspace(0, 2 * np.pi, 3, endpoint=False)
 
     def __init__(self, *args, **kwargs):
@@ -78,10 +80,11 @@ class ChardAxes(PolarAxes):
         lines = super().plot(self.THETA, *args, **kwargs)
         return self._close_lines(lines)
 
-    def plot_series(self, cs: ChardSeries, cm: Colormap = None, **kwargs):
+    def plot_series(self, cs: ChardSeries, color: str = None, **kwargs):
         """Plot a series of y data, where y in 3xN- and emphasis is N-shaped"""
+        colors = cs.colors(cm=self.get_colormap(color))
         lines = []
-        for abc, color in zip(cs.abc, cs.colors(cm)):
+        for abc, color in zip(cs.abc, colors):
             line = self.plot(abc, **kwargs)[0]
             line.set_color(color)
             lines.append(line)
@@ -99,6 +102,23 @@ class ChardAxes(PolarAxes):
         # Axes patch centered at (0.5, 0.5), radius 0.5 in axes coordinates
         return Circle((0.5, 0.5), 0.5)
 
+    def get_colormap(self, color_or_colormap_name):
+        try:
+            cmap = plt.get_cmap(name=color_or_colormap_name)
+        except ValueError:
+            try:
+                hsv = rgb_to_hsv(to_rgb(color_or_colormap_name))
+            except KeyError:
+                hsv = next(self.DEFAULT_COLORS)
+            v_max_span = min([hsv[2], 1 - hsv[2]])
+            hsv0 = hsv
+            hsv1 = hsv
+            hsv0[2] = hsv[2] - 0.8 * v_max_span
+            hsv1[2] = hsv[2] + 0.8 * v_max_span
+            rgb_limits = [hsv_to_rgb(hsv0), hsv_to_rgb(hsv1)]
+            cmap = LinearSegmentedColormap.from_list('', rgb_limits)
+        return cmap
+
 
 register_projection(ChardAxes)
 
@@ -113,7 +133,7 @@ def parse_args() -> Namespace:
     ap.add_argument('-i', '--input', action='append', default=[],
                     help='Path to input file with a single series to plot')
     ap.add_argument('-c', '--color', action='append', default=[],
-                    help='Color or colors to be used for plotting series')
+                    help='Color or colormap to be used for plotting series')
     ap.add_argument('-e', '--emphasis', action='append', default=[],
                     help='Name of the column with information about emphasis; '
                          'Prefix the name with "!" to reverse the order')
@@ -123,8 +143,7 @@ def parse_args() -> Namespace:
 def main() -> None:
     args = parse_args()
     input_paths = [Path(i) for i in args.input]
-    default_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-    colors = cycle(ac if (ac := args.color) else default_colors)
+    colors = cycle(ac if (ac := args.color) else [None])
     emphases = args.emphasis + [''] * len(input_paths)
     fig, ax = plt.subplots(subplot_kw=dict(projection='chard'))
     for input_path, color, emphasis in zip(input_paths, colors, emphases):
