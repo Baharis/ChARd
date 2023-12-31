@@ -1,6 +1,8 @@
+from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
+from itertools import cycle
 from pathlib import Path
-from typing import List, Sequence
+from typing import List
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -60,7 +62,6 @@ class ChardSeries:
         return cm(e)
 
 
-
 class ChardAxes(PolarAxes):
     """A mix between Polar/Radial axes, with fixed 3 variables to plot"""
     name = 'chard'
@@ -102,22 +103,44 @@ class ChardAxes(PolarAxes):
 register_projection(ChardAxes)
 
 
-def example_data():
-    data = [
-        ('Basecase', [
-            [0.08, 0.01, 0.03],
-            [0.07, 0.05, 0.04],
-            [0.01, 0.02, 0.05],
-            [0.02, 0.01, 0.07],
-            [0.01, 0.01, 0.02]]),
-    ]
-    return data
+def parse_args() -> Namespace:
+    """Parse provided arguments if program was run directly from the CLI"""
+    ap = ArgumentParser(
+        prog='chard',
+        description='Plot ChARd plots based on external tabulated input',
+        epilog='Author: Daniel Tchoń, baharis @ GitHub'
+    )
+    ap.add_argument('-i', '--input', action='append', default=[],
+                    help='Path to input file with a single series to plot')
+    ap.add_argument('-c', '--color', action='append', default=[],
+                    help='Color or colors to be used for plotting series')
+    ap.add_argument('-e', '--emphasis', action='append', default=[],
+                    help='Name of the column with information about emphasis; '
+                         'Prefix the name with "!" to reverse the order')
+    return ap.parse_args()
 
 
-if __name__ == '__main__':
+def main() -> None:
+    args = parse_args()
+    input_paths = [Path(i) for i in args.input]
+    default_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    colors = cycle(ac if (ac := args.color) else default_colors)
+    emphases = args.emphasis + [''] * len(input_paths)
+    fig, ax = plt.subplots(subplot_kw=dict(projection='chard'))
+    for input_path, color, emphasis in zip(input_paths, colors, emphases):
+        cs = ChardSeries.from_any(input_path)
+        ax.plot_series(cs, color=color)
+    plt.show()
+
+
+def example() -> None:
     raw_path = Path(__file__).parent / 'examples' / 'raw.csv'
     cs = ChardSeries.from_any(raw_path)
     fig, ax = plt.subplots(subplot_kw=dict(projection='chard'))
     ax.plot_series(cs)
     ax.set_title('Raw data')
     plt.show()
+
+
+if __name__ == '__main__':
+    main()
