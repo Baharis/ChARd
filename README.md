@@ -6,7 +6,7 @@ The file can be used as a stand-alone command-line script or a python library.
 In either case it requires Python version 3.8+ with libraries
 `numpy`, `pandas`, `matplotlib` installed. See also [LICENSE](LICENSE) file.
 
-# Usage as command line tool
+# Usage as a command line tool
 In order to plot a chard plot, you need an input file, which needs to be
 either a "raw" csv with three unnamed columns standing for a, b, c
 in this exact order (see [examples/raw.csv](examples/raw.csv))
@@ -88,7 +88,7 @@ Finally, the unit cell parameters are normalized to the last value in `raw.csv`
 
 ![Combined chard plot](images/combined.png)
 
-# Usage as python library
+# Usage as a python library
 
 In order to use the chard-style matplotlib axis as a library,
 the [chard.py](chard.py) file needs only to be imported.
