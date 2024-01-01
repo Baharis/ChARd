@@ -172,6 +172,8 @@ def parse_args() -> Namespace:
     ap.add_argument('-o', '--output', action='store',
                     help='If given, save the figure under this name instead '
                          'of plotting it in an interactive mode.')
+    ap.add_argument('-w', '--linewidth', action='store', default=1,
+                    help='Width of the lines used to plot series (default 1).')
     return ap.parse_args()
 
 
@@ -193,9 +195,9 @@ def main() -> None:
         cs = ChardSeries.from_any(input_path, emphasis=emphasis.lstrip('@'))
         cs.e = -cs.e if emphasis.startswith('@') else cs.e
         cs = cs.normalized(to=normalizer)
-        ax.plot_series(cs, color=color)
+        ax.plot_series(cs, color=color, linewidth=float(args.linewidth))
     if args.output:
-        plt.savefig(args.output, pad_inches=0.0)
+        plt.savefig(args.output, bbox_inches='tight', pad_inches=0.1)
     else:
         plt.show()
 
