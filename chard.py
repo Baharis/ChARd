@@ -7,6 +7,7 @@ from typing import Union
 import matplotlib.pyplot as plt
 from matplotlib.colors import Colormap, LinearSegmentedColormap, to_rgb,\
     hsv_to_rgb, rgb_to_hsv
+from matplotlib.lines import Line2D
 from matplotlib.patches import Circle
 from matplotlib.projections import register_projection
 from matplotlib.projections.polar import PolarAxes
@@ -26,6 +27,9 @@ class ChardSeries:
     b: np.ndarray
     c: np.ndarray
     e: np.ndarray = None
+
+    def __len__(self):
+        return len(self.a)
 
     @classmethod
     def from_raw(cls, csv_path: str) -> 'ChardSeries':
@@ -53,8 +57,6 @@ class ChardSeries:
 
     def normalized(self, to: Union[int, tuple] = None) -> 'ChardSeries':
         abc = self.a, self.b, self.c
-        print(self.a)
-        print(self.a[-1])
         if isinstance(to, int):
             return ChardSeries(*[x / x[to] for x in abc], self.e)
         elif isinstance(to, list):
@@ -72,20 +74,32 @@ class ChardAxes(PolarAxes):
     """A mix between Polar/Radial axes, with fixed 3 variables to plot"""
     name = 'chard'
     DEFAULT_COLORS = cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+    FONT_SIZE = 15
     THETA = np.linspace(0, 2 * np.pi, 3, endpoint=False)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         """Override starting location to be on the right"""
         super().__init__(*args, **kwargs)
         self.set_theta_zero_location('E')
-        self.set_thetagrids(np.degrees(self.THETA), ['a', 'b', 'c'])
+        self.set_thetagrids(np.degrees(self.THETA), ['a', 'b', 'c'],
+                            fontsize=self.FONT_SIZE)
+        self.set_rlabel_position(90)
+        self.set_axisbelow(False)
+        self.grid(linewidth=1)
+        self.r_min = 1.0
+        self.r_max = 1.0
 
-    def plot(self, *args, **kwargs):
+    @property
+    def r_span(self):
+        return self.r_max - self.r_min
+
+    def plot(self, *args, **kwargs) -> Line2D:
         """Override plot so that line is closed by default"""
         lines = super().plot(self.THETA, *args, **kwargs)
+        self._adapt_r_lims(lines)
         return self._close_lines(lines)
 
-    def plot_series(self, cs: ChardSeries, color: str = None, **kwargs):
+    def plot_series(self, cs: ChardSeries, color: str = None, **kwargs) -> Line2D:
         """Plot a series of y data, where y in 3xN- and emphasis is N-shaped"""
         colors = cs.colors(cm=self.get_colormap(color))
         lines = []
@@ -95,7 +109,18 @@ class ChardAxes(PolarAxes):
             lines.append(line)
         return lines
 
-    def _close_lines(self, lines):
+    def _adapt_r_lims(self, lines: Line2D) -> None:
+        all_r = np.concatenate([line.get_ydata() for line in lines])
+        self.r_min = min(self.r_min, min(all_r))
+        self.r_max = max(self.r_max, max(all_r))
+        self.set_rlim(self.r_min - 0.08 * self.r_span - 1e-8,
+                      self.r_max + 0.02 * self.r_span + 1e-8)
+        for label in self.get_yticklabels():
+            label.set_bbox(dict(facecolor='white', edgecolor='None',
+                                alpha=0.9, boxstyle='Round4, pad=0.1'))
+            label.set_fontsize(self.FONT_SIZE)
+
+    def _close_lines(self, lines: Line2D) -> Line2D:
         for line in lines:
             x, y = line.get_data()
             x = np.append(x, x[0])
@@ -146,6 +171,9 @@ def parse_args() -> Namespace:
     ap.add_argument('-e', '--emphasis', action='append', default=[],
                     help='Name of the column with information about emphasis; '
                          'Prefix the name with "!" to reverse the order')
+    ap.add_argument('-o', '--output', action='store',
+                    help='If given, save the figure under this name instead '
+                         'of plotting it in an interactive mode.')
     return ap.parse_args()
 
 
@@ -167,7 +195,10 @@ def main() -> None:
         cs = ChardSeries.from_any(input_path, emphasis=emphasis)
         cs = cs.normalized(to=normalizer)
         ax.plot_series(cs, color=color)
-    plt.show()
+    if args.output:
+        plt.savefig(args.output, pad_inches=0.0)
+    else:
+        plt.show()
 
 
 def example() -> None:
