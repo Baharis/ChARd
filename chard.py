@@ -101,7 +101,7 @@ class ChardAxes(PolarAxes):
 
     def plot_series(self, cs: ChardSeries, color: str = None, **kwargs) -> Line2D:
         """Plot a series of y data, where y in 3xN- and emphasis is N-shaped"""
-        colors = cs.colors(cm=self.get_colormap(color))
+        colors = cs.colors(cm=self.generate_colormap(color))
         lines = []
         for abc, color in zip(cs.abc, colors):
             line = self.plot(abc, **kwargs)[0]
@@ -132,7 +132,7 @@ class ChardAxes(PolarAxes):
         # Axes patch centered at (0.5, 0.5), radius 0.5 in axes coordinates
         return Circle((0.5, 0.5), 0.5)
 
-    def get_colormap(self, color_or_colormap_name):
+    def generate_colormap(self, color_or_colormap_name):
         try:
             cmap = plt.get_cmap(name=color_or_colormap_name)
         except ValueError:
@@ -141,10 +141,8 @@ class ChardAxes(PolarAxes):
             except KeyError:
                 hsv = next(self.DEFAULT_COLORS)
             v_max_span = min([hsv[2], 1 - hsv[2]])
-            hsv0 = hsv
-            hsv1 = hsv
-            hsv0[2] = hsv[2] - 0.8 * v_max_span
-            hsv1[2] = hsv[2] + 0.8 * v_max_span
+            hsv0 = [hsv[0], hsv[1], hsv[2] - 0.8 * v_max_span]
+            hsv1 = [hsv[0], hsv[1], hsv[2] + 0.8 * v_max_span]
             rgb_limits = [hsv_to_rgb(hsv0), hsv_to_rgb(hsv1)]
             cmap = LinearSegmentedColormap.from_list('', rgb_limits)
         return cmap
