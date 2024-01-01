@@ -2,13 +2,12 @@ from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 from itertools import cycle
 from pathlib import Path
-from typing import Union
+from typing import List, Union
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import Colormap, LinearSegmentedColormap, to_rgb,\
     hsv_to_rgb, rgb_to_hsv
 from matplotlib.lines import Line2D
-from matplotlib.patches import Circle
 from matplotlib.projections import register_projection
 from matplotlib.projections.polar import PolarAxes
 import numpy as np
@@ -55,7 +54,7 @@ class ChardSeries:
     def abc(self):
         return np.vstack([self.a, self.b, self.c]).T
 
-    def normalized(self, to: Union[int, tuple] = None) -> 'ChardSeries':
+    def normalized(self, to: Union[int, list] = None) -> 'ChardSeries':
         abc = self.a, self.b, self.c
         if isinstance(to, int):
             return ChardSeries(*[x / x[to] for x in abc], self.e)
@@ -78,8 +77,10 @@ class ChardAxes(PolarAxes):
     THETA = np.linspace(0, 2 * np.pi, 3, endpoint=False)
 
     def __init__(self, *args, **kwargs) -> None:
-        """Override starting location to be on the right"""
+        """Plot r=1, set starting loc. on the right, set abc theta & labels"""
         super().__init__(*args, **kwargs)
+        super().plot(np.linspace(0, 2*np.pi, 720), np.ones(720), linewidth=2.5,
+                     color=plt.rcParams['grid.color'], zorder=2.4)
         self.set_theta_zero_location('E')
         self.set_thetagrids(np.degrees(self.THETA), ['a', 'b', 'c'],
                             fontsize=self.FONT_SIZE)
@@ -90,16 +91,16 @@ class ChardAxes(PolarAxes):
         self.r_max = 1.0
 
     @property
-    def r_span(self):
+    def r_span(self) -> float:
         return self.r_max - self.r_min
 
     def plot(self, *args, **kwargs) -> Line2D:
-        """Override plot so that line is closed by default"""
+        """Override plot: set tight r limits, close the lines by default"""
         lines = super().plot(self.THETA, *args, **kwargs)
         self._adapt_r_lims(lines)
         return self._close_lines(lines)
 
-    def plot_series(self, cs: ChardSeries, color: str = None, **kwargs) -> Line2D:
+    def plot_series(self, cs: ChardSeries, color: str = None, **kwargs) -> List[Line2D]:
         """Plot a series of y data, where y in 3xN- and emphasis is N-shaped"""
         colors = cs.colors(cm=self.generate_colormap(color))
         lines = []
@@ -110,6 +111,7 @@ class ChardAxes(PolarAxes):
         return lines
 
     def _adapt_r_lims(self, lines: Line2D) -> None:
+        """Set r limits to stick close to plot data, incl. minimum @ center"""
         all_r = np.concatenate([line.get_ydata() for line in lines])
         self.r_min = min(self.r_min, min(all_r))
         self.r_max = max(self.r_max, max(all_r))
@@ -120,7 +122,8 @@ class ChardAxes(PolarAxes):
                                 alpha=0.9, boxstyle='Round4, pad=0.1'))
             label.set_fontsize(self.FONT_SIZE)
 
-    def _close_lines(self, lines: Line2D) -> Line2D:
+    @staticmethod
+    def _close_lines(lines: Line2D) -> Line2D:
         for line in lines:
             x, y = line.get_data()
             x = np.append(x, x[0])
@@ -128,11 +131,8 @@ class ChardAxes(PolarAxes):
             line.set_data(x, y)
         return lines
 
-    def _gen_axes_patch(self):
-        # Axes patch centered at (0.5, 0.5), radius 0.5 in axes coordinates
-        return Circle((0.5, 0.5), 0.5)
-
     def generate_colormap(self, color_or_colormap_name):
+        """Get mpl colormap or prepare one centered around provided color"""
         try:
             cmap = plt.get_cmap(name=color_or_colormap_name)
         except ValueError:
@@ -164,11 +164,12 @@ def parse_args() -> Namespace:
                     help='Color or colormap to be used for plotting series')
     ap.add_argument('-n', '--normalizer', action='append', default=[],
                     help='Index or values to normalize abc to, if needed; '
-                         '"0" will normalize to 1st entry, '
+                         '"0" will normalize to 1st entry, while'
                          '"12.4,6.5,30.4" will normalize to these values.')
     ap.add_argument('-e', '--emphasis', action='append', default=[],
-                    help='Name of the column with information about emphasis; '
-                         'Prefix the name with "@" to reverse the order')
+                    help='Name of the column with information about emphasis, '
+                         'plot as darkening of color or progress on colormap. '
+                         'Prefix the name with "@" to reverse the order.')
     ap.add_argument('-o', '--output', action='store',
                     help='If given, save the figure under this name instead '
                          'of plotting it in an interactive mode.')
@@ -205,9 +206,9 @@ def main() -> None:
 def example() -> None:
     raw_path = Path(__file__).parent / 'examples' / 'raw.csv'
     cs = ChardSeries.from_any(raw_path)
+    cs.normalized(to=[10, 10, 10])
     fig, ax = plt.subplots(subplot_kw=dict(projection='chard'))
-    ax.plot_series(cs)
-    ax.set_title('Raw data')
+    ax.plot_series(cs, color='red')
     plt.show()
 
 
