@@ -168,7 +168,7 @@ def parse_args() -> Namespace:
                          '"12.4,6.5,30.4" will normalize to these values.')
     ap.add_argument('-e', '--emphasis', action='append', default=[],
                     help='Name of the column with information about emphasis; '
-                         'Prefix the name with "!" to reverse the order')
+                         'Prefix the name with "@" to reverse the order')
     ap.add_argument('-o', '--output', action='store',
                     help='If given, save the figure under this name instead '
                          'of plotting it in an interactive mode.')
@@ -190,7 +190,8 @@ def main() -> None:
     fig, ax = plt.subplots(subplot_kw=dict(projection='chard'))
     for input_path, color, emphasis, normalizer in \
             zip(input_paths, colors, emphases, normalizers):
-        cs = ChardSeries.from_any(input_path, emphasis=emphasis)
+        cs = ChardSeries.from_any(input_path, emphasis=emphasis.lstrip('@'))
+        cs.e = -cs.e if emphasis.startswith('@') else cs.e
         cs = cs.normalized(to=normalizer)
         ax.plot_series(cs, color=color)
     if args.output:
