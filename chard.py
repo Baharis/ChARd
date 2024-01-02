@@ -2,6 +2,7 @@ from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
 from itertools import cycle
 from pathlib import Path
+import os
 from typing import List, Union
 
 import matplotlib.pyplot as plt
@@ -12,6 +13,9 @@ from matplotlib.projections import register_projection
 from matplotlib.projections.polar import PolarAxes
 import numpy as np
 import pandas as pd
+
+
+PathLike = Union[str, bytes, os.PathLike]
 
 
 def safe_normalize(array: np.ndarray) -> np.ndarray:
@@ -31,24 +35,57 @@ class ChardSeries:
         return len(self.a)
 
     @classmethod
-    def from_raw(cls, csv_path: str) -> 'ChardSeries':
-        with open(csv_path, 'r') as csv_file:
+    def from_raw_csv(cls,
+                     path: PathLike,
+                     **_) -> 'ChardSeries':
+        with open(path, 'r') as csv_file:
             df = pd.read_csv(csv_file, header=None)
         return cls(df[0].array, df[1].array, df[2].array)
 
     @classmethod
-    def from_named(cls, csv_path: str, emphasis: str = None) -> 'ChardSeries':
-        with open(csv_path, 'r') as csv_file:
+    def from_named_csv(cls,
+                       path: PathLike,
+                       emphasis: str = None,
+                       **_) -> 'ChardSeries':
+        with open(path, 'r') as csv_file:
             df = pd.read_csv(csv_file)
         e = e.array if (e := df.get(emphasis, None)) is not None else None
         return cls(df['a'].array, df['b'].array, df['c'].array, e=e)
 
     @classmethod
-    def from_any(cls, csv_path: str, emphasis: str = None) -> 'ChardSeries':
-        try:
-            return cls.from_named(csv_path, emphasis=emphasis)
-        except KeyError:
-            return cls.from_raw(csv_path)
+    def from_raw_spreadsheet(cls,
+                             path: PathLike,
+                             sheet: str = None,
+                             **_) -> 'ChardSeries':
+        with open(path, 'r') as csv_file:
+            sheet = 0 if sheet is None else sheet
+            df = pd.read_excel(csv_file, sheet, header=None)
+        return cls(df[0].array, df[1].array, df[2].array)
+
+    @classmethod
+    def from_named_spreadsheet(cls,
+                               path: PathLike,
+                               sheet: str = None,
+                               emphasis: str = None) -> 'ChardSeries':
+        with open(path, 'r') as csv_file:
+            sheet = 0 if sheet is None else sheet
+            df = pd.read_excel(csv_file, sheet, header=0)
+            e = e.array if (e := df.get(emphasis, None)) is not None else None
+        return cls(df['a'].array, df['b'].array, df['c'].array, e=e)
+
+    @classmethod
+    def from_any(cls, *args, **kwargs) -> 'ChardSeries':
+        """Args of this method should match at least one of tested readers"""
+        readers = [cls.from_raw_csv,
+                   cls.from_named_csv,
+                   cls.from_raw_spreadsheet,
+                   cls.from_named_spreadsheet]
+        for reader in reversed(readers):
+            try:
+                return reader(*args, **kwargs)
+            except (KeyError, ValueError):
+                continue
+        raise ValueError('None of the implemented readers could read the data')
 
     @property
     def abc(self):
@@ -94,13 +131,16 @@ class ChardAxes(PolarAxes):
     def r_span(self) -> float:
         return self.r_max - self.r_min
 
-    def plot(self, *args, **kwargs) -> Line2D:
+    def plot(self, *args, **kwargs) -> List[Line2D]:
         """Override plot: set tight r limits, close the lines by default"""
         lines = super().plot(self.THETA, *args, **kwargs)
         self._adapt_r_lims(lines)
         return self._close_lines(lines)
 
-    def plot_series(self, cs: ChardSeries, color: str = None, **kwargs) -> List[Line2D]:
+    def plot_series(self,
+                    cs: ChardSeries,
+                    color: str = None,
+                    **kwargs) -> List[Line2D]:
         """Plot a series of y data, where y in 3xN- and emphasis is N-shaped"""
         colors = cs.colors(cm=self.generate_colormap(color))
         lines = []
@@ -124,6 +164,7 @@ class ChardAxes(PolarAxes):
 
     @staticmethod
     def _close_lines(lines: Line2D) -> Line2D:
+        """Append the first point to the end of the line to close a triangle"""
         for line in lines:
             x, y = line.get_data()
             x = np.append(x, x[0])
@@ -160,6 +201,8 @@ def parse_args() -> Namespace:
     )
     ap.add_argument('-i', '--input', action='append', default=[],
                     help='Path to input file with a single series to plot')
+    ap.add_argument('-s', '--sheet', action='append', default=[],
+                    help='Name of the sheet with data if reading spreadsheet.')
     ap.add_argument('-c', '--color', action='append', default=[],
                     help='Color or colormap to be used for plotting series')
     ap.add_argument('-n', '--normalizer', action='append', default=[],
@@ -190,10 +233,12 @@ def main() -> None:
         except ValueError:
             normalizers.append([float(a.strip()) for a in an.split(',')])
     normalizers += [None] * len(input_paths)
+    sheets = args.sheet + [None] * len(input_paths)
     fig, ax = plt.subplots(subplot_kw=dict(projection='chard'))
-    for input_path, color, emphasis, normalizer in \
-            zip(input_paths, colors, emphases, normalizers):
-        cs = ChardSeries.from_any(input_path, emphasis=emphasis.lstrip('@'))
+    for input_path, color, emphasis, normalizer, sheet in \
+            zip(input_paths, colors, emphases, normalizers, sheets):
+        cs = ChardSeries.from_any(path=input_path, sheet=sheet,
+                                  emphasis=emphasis.lstrip('@'))
         cs.e = -cs.e if emphasis.startswith('@') else cs.e
         cs = cs.normalized(to=normalizer)
         ax.plot_series(cs, color=color, linewidth=float(args.linewidth))

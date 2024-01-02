@@ -8,12 +8,15 @@ In either case it requires Python version 3.8+ with libraries
 
 # Usage as a command line tool
 In order to plot a chard plot, you need an input file, which needs to be
-either a "raw" csv with three unnamed columns standing for a, b, c
+either a "raw" file with three unnamed columns standing for a, b, c
 in this exact order (see [examples/raw.csv](examples/raw.csv))
-or a "named" csv with column names in first row including columns named
+or a "named" file with column names in first row including columns named
 "a", "b", "c" and any other such as "p" or "T"
 (see [examples/named.csv](examples/named.csv)).
-It is suggested to use the latter format, as it allows more flexibility.
+The file can be either a csv or any spreadsheet supported by your version
+of pandas (xls, ods, xlrd, pyxlsb for pandas 1.2+, + openpyxl for 1.3+).
+It is suggested to use a "named" format (with named columns),
+as it allows more flexibility.
 
 The simplest ChARd can be generated using command:
 
@@ -25,6 +28,7 @@ In general, the following flags may be specified multiple times,
 once for each ChARd series:
 
 - `-i`, `--input` - Path to input file with a single series to plot;
+- `-s`, `--sheet` - If importing from spreadsheet, name of the sheet with data;
 - `-c`, `--color` - Color or colormap to be used for plotting series;
 - `-n`, `--normalizer` - Index or values to normalize abc to, if needed;
   `0` will normalize to 1st entry,
