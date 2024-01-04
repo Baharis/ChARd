@@ -1,9 +1,10 @@
 from argparse import ArgumentParser, Namespace
+from collections import deque
 from dataclasses import dataclass
-from itertools import cycle
+from itertools import cycle, islice
 from pathlib import Path
 import os
-from typing import List, Union
+from typing import Any, Callable, Iterable, List, Union
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import Colormap, LinearSegmentedColormap, to_rgb,\
@@ -16,6 +17,24 @@ import pandas as pd
 
 
 PathLike = Union[str, bytes, os.PathLike]
+
+
+def does_not_throw(value: Any, fun: Callable, exception: Exception) -> bool:
+    try:
+        _ = fun(value)
+    except exception:  # noqa
+        return False
+    else:
+        return True
+
+
+def pairwise(it: Iterable):
+    """Iterate `it` pairwise, e.g. (1, 2, 3, 4) -> (1, 2), (2, 3), (3, 4)"""
+    it = iter(it)
+    window = deque(islice(it, 1), maxlen=2)
+    for x in it:
+        window.append(x)
+        yield tuple(window)
 
 
 def safe_normalize(array: np.ndarray) -> np.ndarray:
@@ -106,6 +125,99 @@ class ChardSeries:
         return cm(e)
 
 
+class ColormapGenerator:
+    """This class generates colormaps based on descriptors for ChardAxes"""
+    DEFAULT_COLORS = cycle(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+    SEPARATOR = ':'
+
+    @staticmethod
+    def _is_int(s: str) -> bool:
+        return does_not_throw(s, int, ValueError)
+
+    @staticmethod
+    def _is_mpl_color(s: str) -> bool:
+        return does_not_throw(s, to_rgb, ValueError)
+
+    @staticmethod
+    def _is_mpl_colormap(s: str) -> bool:
+        return does_not_throw(s, plt.get_cmap, ValueError)
+
+    class ColormapGeneratorException(Exception):
+        pass
+
+    def _join_colormaps(self,
+                        colormaps: List[LinearSegmentedColormap],
+                        start: float = 0.0,
+                        stop: float = 1.0
+                        ) -> LinearSegmentedColormap:
+        colors = [colormaps[0](0.0)]
+        for cm in colormaps:
+            colors.extend(list(cm(np.linspace(0., 1., 256)[1:])))
+        start_index = min(max(0, int(start * len(colors))), len(colors))
+        stop_index = min(max(0, int(stop * len(colors))), len(colors))
+        color_stack = np.vstack(colors[start_index:stop_index])
+        return LinearSegmentedColormap.from_list('', color_stack)
+
+    def _split_colormap_descriptor(self, s: str) -> List[str]:
+        """Recursively split `descriptor` into valid color(map) or int parts"""
+        if self._is_int(s) or self._is_mpl_color(s) or self._is_mpl_colormap(s):
+            return [s]
+        else:
+            sep_positions = [i for i, c in enumerate(s) if c == self.SEPARATOR]
+            for sep_pos in sep_positions:
+                try:
+                    return [*self._split_colormap_descriptor(s[:sep_pos]),
+                            *self._split_colormap_descriptor(s[sep_pos+1:])]
+                except self.ColormapGeneratorException:
+                    pass
+        raise self.ColormapGeneratorException(f'Could not interpret "{s}"')
+
+    def generate_colormap(self, descriptor: str) -> Colormap:
+        """
+        Generate a colormap given `descriptor`. The definition of
+        the descriptor can be complex and utilize the following objects:
+        - mpl 1 color name (C) - this will generate uniform 1-color colormap;
+        - mpl colormap name (CM) - this will get named mpl colormap;
+        Additionally, multiple mpl colors can be juxtaposed to make a colormap:
+        - 'C:C' - this will generate 2-color hsv gradient from 1st to 2nd C;
+        - 'C:C:C' - this will generate 3-color hsv gradient 1-2-3 C etc.;
+        Each of the gradients described above can be then sliced using
+        'gradient:start_percent:stop_percent' notation.
+        Some examples of the accepted notation are listed below:
+        - 'viridis:25:75' will yield the central half of the 'viridis' palette;
+        - 'red:lime:blue:red' will generate a circular rainbow palette;
+        - '#ff0000:#0000ff:0:50' will generate the first half of the red-blue
+          spectrum; you can then use the second half for another ChARd series.
+        """
+        if not descriptor:
+            default = next(self.DEFAULT_COLORS)
+            desc_parts = [default]
+        else:
+            desc_parts = self._split_colormap_descriptor(descriptor)
+        desc_range = []
+        while self._is_int(desc_parts[-1]):
+            desc_range.insert(0, float(desc_parts.pop()) / 100)
+        if not desc_range:
+            desc_range = [0.0, 1.0]
+        colormaps = []
+        if len(desc_parts) == 1:
+            if self._is_mpl_color(desc_parts[0]):
+                desc_parts.append(desc_parts[0])
+            if self._is_mpl_colormap(desc_parts[0]):
+                colormaps = [plt.get_cmap(desc_parts[0])]
+        for dp1, dp2 in pairwise(desc_parts):
+            if self._is_mpl_colormap(dp1):
+                colormaps.append(plt.get_cmap(dp1))
+            elif self._is_mpl_color(dp1) and self._is_mpl_color(dp2):
+                hsv1 = rgb_to_hsv(to_rgb(dp1))
+                hsv2 = rgb_to_hsv(to_rgb(dp2))
+                hsv_space = np.linspace(hsv1, hsv2, 256, axis=1).T
+                rgb_space = np.vstack([hsv_to_rgb(hsv) for hsv in hsv_space])
+                cm = LinearSegmentedColormap.from_list('', rgb_space)
+                colormaps.append(cm)
+        return self._join_colormaps(colormaps, desc_range[0], desc_range[1])
+
+
 class ChardAxes(PolarAxes):
     """A mix between Polar/Radial axes, with fixed 3 variables to plot"""
     name = 'chard'
@@ -118,6 +230,7 @@ class ChardAxes(PolarAxes):
         super().__init__(*args, **kwargs)
         super().plot(np.linspace(0, 2*np.pi, 720), np.ones(720), linewidth=2.5,
                      color=plt.rcParams['grid.color'], zorder=2.4)
+        self.colormap_generator = ColormapGenerator()
         self.set_theta_zero_location('E')
         self.set_thetagrids(np.degrees(self.THETA), ['a', 'b', 'c'],
                             fontsize=self.FONT_SIZE)
@@ -142,7 +255,7 @@ class ChardAxes(PolarAxes):
                     color: str = None,
                     **kwargs) -> List[Line2D]:
         """Plot a series of y data, where y in 3xN- and emphasis is N-shaped"""
-        colors = cs.colors(cm=self.generate_colormap(color))
+        colors = cs.colors(cm=self.colormap_generator.generate_colormap(color))
         lines = []
         for abc, color in zip(cs.abc, colors):
             line = self.plot(abc, **kwargs)[0]
@@ -172,21 +285,21 @@ class ChardAxes(PolarAxes):
             line.set_data(x, y)
         return lines
 
-    def generate_colormap(self, color_or_colormap_name):
-        """Get mpl colormap or prepare one centered around provided color"""
-        try:
-            cmap = plt.get_cmap(name=color_or_colormap_name)
-        except ValueError:
-            try:
-                hsv = rgb_to_hsv(to_rgb(color_or_colormap_name))
-            except KeyError:
-                hsv = next(self.DEFAULT_COLORS)
-            v_max_span = min([hsv[2], 1 - hsv[2]])
-            hsv0 = [hsv[0], hsv[1], hsv[2] - 0.8 * v_max_span]
-            hsv1 = [hsv[0], hsv[1], hsv[2] + 0.8 * v_max_span]
-            rgb_limits = [hsv_to_rgb(hsv0), hsv_to_rgb(hsv1)]
-            cmap = LinearSegmentedColormap.from_list('', rgb_limits)
-        return cmap
+    # def generate_colormap(self, color_or_colormap_name):
+    #     """Get mpl colormap or prepare one centered around provided color"""
+    #     try:
+    #         cmap = plt.get_cmap(name=color_or_colormap_name)
+    #     except ValueError:
+    #         try:
+    #             hsv = rgb_to_hsv(to_rgb(color_or_colormap_name))
+    #         except KeyError:
+    #             hsv = next(self.DEFAULT_COLORS)
+    #         v_max_span = min([hsv[2], 1 - hsv[2]])
+    #         hsv0 = [hsv[0], hsv[1], hsv[2] - 0.8 * v_max_span]
+    #         hsv1 = [hsv[0], hsv[1], hsv[2] + 0.8 * v_max_span]
+    #         rgb_limits = [hsv_to_rgb(hsv0), hsv_to_rgb(hsv1)]
+    #         cmap = LinearSegmentedColormap.from_list('', rgb_limits)
+    #     return cmap
 
 
 register_projection(ChardAxes)

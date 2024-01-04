@@ -29,7 +29,8 @@ once for each ChARd series:
 
 - `-i`, `--input` - Path to input file with a single series to plot;
 - `-s`, `--sheet` - If importing from spreadsheet, name of the sheet with data;
-- `-c`, `--color` - Color or colormap to be used for plotting series;
+- `-c`, `--color` - Color, colon-separated series of colors, or colormap
+  to be used for plotting series, can be sliced (see docstring for full desc.);
 - `-n`, `--normalizer` - Index or values to normalize abc to, if needed;
   `0` will normalize to 1st entry,
   while `12.4,6.5,30.4` will normalize to these values.
@@ -74,7 +75,7 @@ row (`-n 0`), and the width of plotted lines is slightly increased (`-w 1.5`).
 ### Example 3 – ChARd plot with multiple series
 
     python chard.py -i examples/raw.csv -c "#800000" -e p -n "-1" \
-                    -i examples/named.csv -c olive -e p -n 0 \
+                    -i examples/named.csv -c khaki:teal -e p -n 0 \
                     -o images/combined.png
 
 While the previous plots were prepared using a single series each,
@@ -83,10 +84,10 @@ multiple times. As a result, this plot is based on data from both
 [examples/raw.csv](examples/raw.csv) and
 [examples/named.csv](examples/named.csv).
 The first dataset is drawn in dark red given with a hex code (`-c "#800000"`),
-while the second one is centered around matplotlib color "olive" (`-c olive`).
-The emphasis on both plots comes from column "p" (`-e p`):
-this information is naturally absent in the raw dataset,
-hence all red lines share the hue.
+while the second one is drawn in colors spanning from "khaki" to "teal"
+(`-c khaki:teal`). The emphasis on both plots comes from column "p" (`-e p`),
+though this information is naturally absent in the first "raw" dataset
+which features no "p"-named column.
 Finally, the unit cell parameters are normalized to the last value in `raw.csv`
 (`-n "-1"`) and to the first value in `named.csv` (`-n 0`).
 
