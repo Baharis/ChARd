@@ -102,7 +102,7 @@ class ChardSeries:
         for reader in reversed(readers):
             try:
                 return reader(*args, **kwargs)
-            except (KeyError, ValueError):
+            except (KeyError, ValueError, TypeError):
                 continue
         raise ValueError('None of the implemented readers could read the data')
 
