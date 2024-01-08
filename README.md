@@ -42,6 +42,7 @@ The following flags may be specified once and affect the final figure:
 - `-o`, `--output` - If given, save the figure under this name instead
   of plotting it in an interactive mode.
 - `-w`, `--linewidth` - Width of the lines used to plot series (default 1).
+- `-l`, `--labelsize` - Size of the axis and grid line labels (default 15).
 
 ## Examples
 

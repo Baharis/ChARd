@@ -246,6 +246,7 @@ class ChardAxes(PolarAxes):
 
     def plot(self, *args, **kwargs) -> List[Line2D]:
         """Override plot: set tight r limits, close the lines by default"""
+        self.set_thetagrids(np.degrees(self.THETA), fontsize=self.FONT_SIZE)
         lines = super().plot(self.THETA, *args, **kwargs)
         self._adapt_r_lims(lines)
         return self._close_lines(lines)
@@ -331,6 +332,8 @@ def parse_args() -> Namespace:
                          'of plotting it in an interactive mode.')
     ap.add_argument('-w', '--linewidth', action='store', default=1,
                     help='Width of the lines used to plot series (default 1).')
+    ap.add_argument('-l', '--labelsize', action='store', default=15,
+                    help='Size of the axis and grid line labels (default 15).')
     return ap.parse_args()
 
 
@@ -348,6 +351,7 @@ def main() -> None:
     normalizers += [None] * len(input_paths)
     sheets = args.sheet + [None] * len(input_paths)
     fig, ax = plt.subplots(subplot_kw=dict(projection='chard'))
+    ax.FONT_SIZE = int(args.labelsize)
     for input_path, color, emphasis, normalizer, sheet in \
             zip(input_paths, colors, emphases, normalizers, sheets):
         cs = ChardSeries.from_any(path=input_path, sheet=sheet,
