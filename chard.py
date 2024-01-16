@@ -1,5 +1,6 @@
 from argparse import ArgumentParser, Namespace
 from collections import deque
+from contextlib import suppress
 from dataclasses import dataclass
 from itertools import cycle, islice
 from pathlib import Path
@@ -165,11 +166,9 @@ class ColormapGenerator:
         else:
             sep_positions = [i for i, c in enumerate(s) if c == self.SEPARATOR]
             for sep_pos in sep_positions:
-                try:
+                with suppress(self.ColormapGeneratorException):
                     return [*self._split_colormap_descriptor(s[:sep_pos]),
                             *self._split_colormap_descriptor(s[sep_pos+1:])]
-                except self.ColormapGeneratorException:
-                    pass
         raise self.ColormapGeneratorException(f'Could not interpret "{s}"')
 
     def generate_colormap(self, descriptor: str) -> Colormap:
