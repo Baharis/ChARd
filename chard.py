@@ -359,7 +359,7 @@ def main() -> None:
         cs = cs.normalized(to=normalizer)
         ax.plot_series(cs, color=color, linewidth=float(args.linewidth))
     if args.output:
-        plt.savefig(args.output, bbox_inches='tight', pad_inches=0.1)
+        plt.savefig(args.output, bbox_inches='tight', pad_inches=0.1, dpi=300)
     else:
         plt.show()
 
