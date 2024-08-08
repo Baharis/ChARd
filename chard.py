@@ -1,11 +1,11 @@
-from argparse import ArgumentParser, Namespace
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from collections import deque
 from contextlib import suppress
 from dataclasses import dataclass
 from itertools import cycle, islice
 from pathlib import Path
 import os
-from typing import Any, Callable, Iterable, List, Union
+from typing import Any, Callable, Iterable, List, Protocol, Union
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import Colormap, LinearSegmentedColormap, to_rgb,\
@@ -20,13 +20,14 @@ import pandas as pd
 PathLike = Union[str, bytes, os.PathLike]
 
 
-def does_not_throw(value: Any, fun: Callable, exception: Exception) -> bool:
+def conversion_raises(value: Any, fun: Callable, exception: Exception) -> bool:
+    """Return True if `fun(value)` raises `exception`, False otherwise"""
     try:
         _ = fun(value)
     except exception:  # noqa
-        return False
-    else:
         return True
+    else:
+        return False
 
 
 def pairwise(it: Iterable):
@@ -133,15 +134,15 @@ class ColormapGenerator:
 
     @staticmethod
     def _is_int(s: str) -> bool:
-        return does_not_throw(s, int, ValueError)
+        return not conversion_raises(s, int, ValueError)
 
     @staticmethod
     def _is_mpl_color(s: str) -> bool:
-        return does_not_throw(s, to_rgb, ValueError)
+        return not conversion_raises(s, to_rgb, ValueError)
 
     @staticmethod
     def _is_mpl_colormap(s: str) -> bool:
-        return does_not_throw(s, plt.get_cmap, ValueError)
+        return not conversion_raises(s, plt.get_cmap, ValueError)
 
     class ColormapGeneratorException(Exception):
         pass
@@ -305,12 +306,26 @@ class ChardAxes(PolarAxes):
 register_projection(ChardAxes)
 
 
-def parse_args() -> Namespace:
+class ChardNamespace(Protocol):
+    """Expected output of `parse_args` function"""
+    input: List[PathLike]
+    sheet: List[str]
+    color: List[str]
+    axes: str
+    normalizer: List[str]
+    emphasis: List[str]
+    output: PathLike
+    linewidth: str
+    labelsize: str
+
+
+def parse_args() -> ChardNamespace:
     """Parse provided arguments if program was run directly from the CLI"""
     ap = ArgumentParser(
         prog='chard',
         description='Plot ChARd plots based on external tabulated input',
-        epilog='Author: Daniel Tchoń, baharis @ GitHub'
+        epilog='Author: Daniel Tchoń, baharis @ GitHub',
+        formatter_class=ArgumentDefaultsHelpFormatter,
     )
     ap.add_argument('-i', '--input', action='append', default=[],
                     help='Path to input file with a single series to plot')
@@ -318,21 +333,24 @@ def parse_args() -> Namespace:
                     help='Name of the sheet with data if reading spreadsheet.')
     ap.add_argument('-c', '--color', action='append', default=[],
                     help='Color or colormap to be used for plotting series')
+    ap.add_argument('-a', '--axes', action='store', default='simple',
+                    choices=['simple', 'right'],
+                    help='Style of the axes behind the data.')
     ap.add_argument('-n', '--normalizer', action='append', default=[],
                     help='Index or values to normalize abc to, if needed; '
-                         '"0" will normalize to 1st entry, while'
+                         '"0" will normalize to 1st entry, while '
                          '"12.4,6.5,30.4" will normalize to these values.')
     ap.add_argument('-e', '--emphasis', action='append', default=[],
                     help='Name of the column with information about emphasis, '
                          'plot as darkening of color or progress on colormap. '
                          'Prefix the name with "@" to reverse the order.')
-    ap.add_argument('-o', '--output', action='store',
+    ap.add_argument('-o', '--output', action='store', type=str,
                     help='If given, save the figure under this name instead '
                          'of plotting it in an interactive mode.')
-    ap.add_argument('-w', '--linewidth', action='store', default=1,
-                    help='Width of the lines used to plot series (default 1).')
-    ap.add_argument('-l', '--labelsize', action='store', default=15,
-                    help='Size of the axis and grid line labels (default 15).')
+    ap.add_argument('-w', '--linewidth', action='store', type=float, default=1,
+                    help='Width of the lines used to plot series.')
+    ap.add_argument('-l', '--labelsize', action='store', type=float, default=15,
+                    help='Size of the axis and grid line labels.')
     return ap.parse_args()
 
 
