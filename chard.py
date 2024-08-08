@@ -252,7 +252,7 @@ class ChardAxes(PolarAxes):
         """Plot r=1, set starting loc. on the right, set abc theta & labels"""
         super().__init__(*args, **kwargs)
         super().plot(np.linspace(0, 2*np.pi, 720), np.ones(720), linewidth=2.5,
-                     color=plt.rcParams['grid.color'], zorder=2.4)
+                     color=plt.rcParams['grid.color'], zorder=2.0)
         self.colormap_generator = ColormapGenerator()
         self.set_theta_zero_location('E')
         self.set_thetagrids(np.degrees(self.THETA), ['a', 'b', 'c'],
@@ -384,6 +384,18 @@ def plot_chard(ns: ChardNamespace) -> None:
         cs.e = -cs.e if e.startswith('@') else cs.e
         cs = cs.normalized(to=n)
         ax.plot_series(cs, color=c, lw=lw)
+        ax.set_axisbelow(True)
+
+    if ns.axes == 'simple':
+        r_min, r_max = ax.get_ylim()
+        for tl in ax.yaxis.get_ticklabels():
+            x, y = tl.get_position()
+            if not r_min < y < r_max:
+                del tl
+                continue
+            tl.set_verticalalignment('center')
+            fig.add_artist(tl, clip=False)
+
     if ns.output:
         plt.savefig(ns.output, bbox_inches='tight', pad_inches=0.1, dpi=300)
     else:
