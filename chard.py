@@ -286,22 +286,6 @@ class ChardAxes(PolarAxes):
             line.set_data(x, y)
         return lines
 
-    # def generate_colormap(self, color_or_colormap_name):
-    #     """Get mpl colormap or prepare one centered around provided color"""
-    #     try:
-    #         cmap = plt.get_cmap(name=color_or_colormap_name)
-    #     except ValueError:
-    #         try:
-    #             hsv = rgb_to_hsv(to_rgb(color_or_colormap_name))
-    #         except KeyError:
-    #             hsv = next(self.DEFAULT_COLORS)
-    #         v_max_span = min([hsv[2], 1 - hsv[2]])
-    #         hsv0 = [hsv[0], hsv[1], hsv[2] - 0.8 * v_max_span]
-    #         hsv1 = [hsv[0], hsv[1], hsv[2] + 0.8 * v_max_span]
-    #         rgb_limits = [hsv_to_rgb(hsv0), hsv_to_rgb(hsv1)]
-    #         cmap = LinearSegmentedColormap.from_list('', rgb_limits)
-    #     return cmap
-
 
 register_projection(ChardAxes)
 
