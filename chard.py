@@ -1,11 +1,11 @@
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
 from collections import deque
 from contextlib import suppress
 from dataclasses import dataclass
 from itertools import cycle, islice
 from pathlib import Path
 import os
-from typing import Any, Callable, Iterable, List, Protocol, Union
+from typing import Any, Callable, Iterable, List, TypeAlias, Union
 
 import matplotlib.pyplot as plt
 from matplotlib.colors import Colormap, LinearSegmentedColormap, to_rgb,\
@@ -17,7 +17,18 @@ import numpy as np
 import pandas as pd
 
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~ CONSTANTS AND TYPE HINTS ~~~~~~~~~~~~~~~~~~~~~~~~ #
+
+
+IntOrVector3: TypeAlias = Union[int, np.ndarray]
 PathLike = Union[str, bytes, os.PathLike]
+
+
+NONES = [None] * 1_000_000
+EMPTIES = [''] * 1_000_000
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~ CONVENIENCE FUNCTIONS ~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
 
 def conversion_raises(value: Any, fun: Callable, exception: Exception) -> bool:
@@ -43,6 +54,15 @@ def safe_normalize(array: np.ndarray) -> np.ndarray:
     """Normalize data to 0-1 range, return 0.5s if all data is equal"""
     mn, mx = np.min(array), np.max(array)
     return (array - mn) / (mx - mn) if mn < mx else np.full_like(array, 0.5)
+
+
+def str2int_or_vector(s: str) -> IntOrVector3:
+    """Convert str "2" into int 2 and str "1,2,3" into np.array([1, 2, 3])"""
+    return np.array([float(si.strip()) for si in s.split(',')], dtype=float) \
+        if conversion_raises(s, int, ValueError) else int(s)
+
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ CHARD AXES ETC ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ #
 
 
 @dataclass
@@ -112,14 +132,17 @@ class ChardSeries:
     def abc(self):
         return np.vstack([self.a, self.b, self.c]).T
 
-    def normalized(self, to: Union[int, list] = None) -> 'ChardSeries':
+    def normalized(self, to: IntOrVector3 = None) -> 'ChardSeries':
+        """Normalize self to `to`th element if int or `to`'s values if array"""
         abc = self.a, self.b, self.c
         if isinstance(to, int):
             return ChardSeries(*[x / x[to] for x in abc], self.e)
-        elif isinstance(to, list):
+        elif isinstance(to, np.ndarray):
             return ChardSeries(*[x / y for x, y in zip(abc, to)], self.e)
-        else:
+        elif to is None:
             return self
+        else:
+            return ValueError(repr(to))
 
     def colors(self, cm: Colormap) -> np.ndarray:
         e = safe_normalize(self.e) if self.e is not None \
@@ -290,7 +313,10 @@ class ChardAxes(PolarAxes):
 register_projection(ChardAxes)
 
 
-class ChardNamespace(Protocol):
+# ~~~~~~~~~~~~~~~~~~~~~~~~ PARSING COMMAND LINE INPUT ~~~~~~~~~~~~~~~~~~~~~~~ #
+
+
+class ChardNamespace(Namespace):
     """Expected output of `parse_args` function"""
     input: List[PathLike]
     sheet: List[str]
@@ -338,32 +364,37 @@ def parse_args() -> ChardNamespace:
     return ap.parse_args()
 
 
-def main() -> None:
-    args = parse_args()
-    input_paths = [Path(i) for i in args.input]
-    colors = cycle(ac if (ac := args.color) else [None])
-    emphases = args.emphasis + [''] * len(input_paths)
-    normalizers = []
-    for an in args.normalizer:
-        try:
-            normalizers.append(int(an))
-        except ValueError:
-            normalizers.append([float(a.strip()) for a in an.split(',')])
-    normalizers += [None] * len(input_paths)
-    sheets = args.sheet + [None] * len(input_paths)
+# ~~~~~~~~~~~~~~~~~~~~~~~~~ PLOTTING COMPLETE FIGURE ~~~~~~~~~~~~~~~~~~~~~~~~ #
+
+
+def plot_chard(ns: ChardNamespace) -> None:
+    """Generate the ChARd plot based on the kwargs provided in namespace"""
+
+    inputs = [Path(i) for i in ns.input]
+    colors = cycle(ac if (ac := ns.color) else [None])
+    emphases = ns.emphasis + EMPTIES
+    normalizers = [str2int_or_vector(n) for n in ns.normalizer] + NONES
+    sheets = ns.sheet + NONES
+    lw = float(ns.linewidth)
+
     fig, ax = plt.subplots(subplot_kw=dict(projection='chard'))
-    ax.FONT_SIZE = int(args.labelsize)
-    for input_path, color, emphasis, normalizer, sheet in \
-            zip(input_paths, colors, emphases, normalizers, sheets):
-        cs = ChardSeries.from_any(path=input_path, sheet=sheet,
-                                  emphasis=emphasis.lstrip('@'))
-        cs.e = -cs.e if emphasis.startswith('@') else cs.e
-        cs = cs.normalized(to=normalizer)
-        ax.plot_series(cs, color=color, linewidth=float(args.linewidth))
-    if args.output:
-        plt.savefig(args.output, bbox_inches='tight', pad_inches=0.1, dpi=300)
+    ax.FONT_SIZE = int(ns.labelsize)
+    for i, c, e, n, s in zip(inputs, colors, emphases, normalizers, sheets):
+        cs = ChardSeries.from_any(path=i, sheet=s, emphasis=e.lstrip('@'))
+        cs.e = -cs.e if e.startswith('@') else cs.e
+        cs = cs.normalized(to=n)
+        ax.plot_series(cs, color=c, lw=lw)
+    if ns.output:
+        plt.savefig(ns.output, bbox_inches='tight', pad_inches=0.1, dpi=300)
     else:
         plt.show()
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~ COMMAND LINE ENTRY POINT ~~~~~~~~~~~~~~~~~~~~~~~~ #
+
+
+def main() -> None:
+    args = parse_args()
+    plot_chard(args)
 
 
 def example() -> None:
