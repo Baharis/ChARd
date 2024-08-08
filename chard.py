@@ -386,18 +386,43 @@ def plot_chard(ns: ChardNamespace) -> None:
         ax.plot_series(cs, color=c, lw=lw)
         ax.set_axisbelow(True)
 
+    r_min, r_max = ax.get_ylim()
+
     if ns.axes == 'simple':
-        r_min, r_max = ax.get_ylim()
         for tl in ax.yaxis.get_ticklabels():
-            x, y = tl.get_position()
-            if not r_min < y < r_max:
+            t, r = tl.get_position()
+            if not r_min < r < r_max:
                 del tl
                 continue
             tl.set_verticalalignment('center')
             fig.add_artist(tl, clip=False)
-
+    elif ns.axes == 'right':
+        ann_transf = ax.transData + fig.transFigure.inverted()
+        right_x, _ = ann_transf.transform([.0, r_max])
+        for tl in ax.yaxis.get_ticklabels():
+            t, r = tl.get_position()
+            if not r_min < r < r_max:
+                del tl
+                continue
+            _, y = ann_transf.transform((np.pi / 2, r))
+            ax.annotate(text=tl.get_text(),
+                        xy=(np.pi / 2, r),
+                        xycoords=ax.transData,
+                        xytext=(right_x, y),
+                        textcoords='figure fraction',
+                        arrowprops=dict(arrowstyle='-',
+                                        color=plt.rcParams['grid.color'],
+                                        linewidth=2.0 if r == 1.0 else 1.0, ),
+                        color='gray',
+                        horizontalalignment='left',
+                        verticalalignment='center',
+                        fontsize='xx-large',
+                        zorder=1.0)
+            tl.set_visible(False)
+    else:
+        raise ValueError(f'Unknown {ns.axes=}')
     if ns.output:
-        plt.savefig(ns.output, bbox_inches='tight', pad_inches=0.1, dpi=300)
+        plt.savefig(ns.output, pad_inches=0.1, dpi=300)
     else:
         plt.show()
 

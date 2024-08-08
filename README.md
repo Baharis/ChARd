@@ -77,7 +77,7 @@ row (`-n 0`), and the width of plotted lines is slightly increased (`-w 1.5`).
 
     python chard.py -i examples/raw.csv -c "#800000" -e p -n "-1" \
                     -i examples/named.csv -c khaki:teal -e p -n 0 \
-                    -o images/combined.png
+                    -o images/combined.png -a right
 
 While the previous plots were prepared using a single series each,
 multiple series can be provided by specifying `-i` (and other necessary flags)
@@ -89,6 +89,7 @@ while the second one is drawn in colors spanning from "khaki" to "teal"
 (`-c khaki:teal`). The emphasis on both plots comes from column "p" (`-e p`),
 though this information is naturally absent in the first "raw" dataset
 which features no "p"-named column.
+The axis tick labels are moved to the right (`-a right`).
 Finally, the unit cell parameters are normalized to the last value in `raw.csv`
 (`-n "-1"`) and to the first value in `named.csv` (`-n 0`).
 
